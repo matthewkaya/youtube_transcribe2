@@ -85,17 +85,19 @@ function parseCookies() {
 
 // Ana endpoint
 app.post('/transcript', async (req, res) => {
-  const { url } = req.body;
+  const { url, debug = false } = req.body; // debug parametresi eklendi
   const logs = [];
 
   if (!url || !url.includes("youtube.com/watch")) {
     return res.status(400).json({ error: 'Gecerli bir YouTube video URL\'si girin.' });
   }
 
-  clearScreenshots();
+  if (debug) {
+    clearScreenshots(); // Sadece debug modunda screenshot'ları temizle
+  }
 
   try {
-    logs.push('▶️ Puppeteer başlatılıyor...');
+    if (debug) logs.push('▶️ Puppeteer başlatılıyor...');
     const browser = await puppeteer.launch({
       headless: 'new',
       args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
@@ -106,7 +108,7 @@ app.post('/transcript', async (req, res) => {
     await page.setViewport({ width: 1280, height: 800 });
 
     // Cookie'leri yükle
-    logs.push('🍪 Cookie\'ler yükleniyor...');
+    if (debug) logs.push('🍪 Cookie\'ler yükleniyor...');
     const cookies = parseCookies();
     if (cookies.length > 0) {
       for (const cookie of cookies) {
@@ -116,24 +118,24 @@ app.post('/transcript', async (req, res) => {
           // Cookie hatalarını sessizce geç
         }
       }
-      logs.push(`✅ ${cookies.length} cookie yüklendi`);
+      if (debug) logs.push(`✅ ${cookies.length} cookie yüklendi`);
     }
 
     // 1. Direkt YouTube'a git
-    logs.push('🌐 YouTube video sayfasına gidiliyor...');
+    if (debug) logs.push('🌐 YouTube video sayfasına gidiliyor...');
     await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 });
     await delay(3000);
-    await page.screenshot({ path: `${SCREENSHOT_DIR}/1_video_loaded.png` });
+    if (debug) await page.screenshot({ path: `${SCREENSHOT_DIR}/1_video_loaded.png` });
 
     // 2. Sayfayı aşağı kaydır (description kısmını görmek için)
-    logs.push('📜 Sayfa aşağı kaydırılıyor...');
+    if (debug) logs.push('📜 Sayfa aşağı kaydırılıyor...');
     await page.evaluate(() => {
       window.scrollTo(0, 400);
     });
     await delay(2000);
 
     // 3. ...more butonu varsa tıkla
-    logs.push('🔍 ...more butonu aranıyor...');
+    if (debug) logs.push('🔍 ...more butonu aranıyor...');
     const expandSelectors = [
       'tp-yt-paper-button#expand',
       'ytd-text-inline-expander #expand',
@@ -146,12 +148,12 @@ app.post('/transcript', async (req, res) => {
       try {
         expandBtn = await page.$(selector);
         if (expandBtn) {
-          logs.push(`📖 ...more butonu bulundu (${selector}), tıklanıyor...`);
+          if (debug) logs.push(`📖 ...more butonu bulundu (${selector}), tıklanıyor...`);
           await page.evaluate(el => el.scrollIntoView(), expandBtn);
           await delay(500);
           await expandBtn.click();
           await delay(1500);
-          await page.screenshot({ path: `${SCREENSHOT_DIR}/2_after_expand.png` });
+          if (debug) await page.screenshot({ path: `${SCREENSHOT_DIR}/2_after_expand.png` });
           break;
         }
       } catch (e) {
@@ -159,12 +161,12 @@ app.post('/transcript', async (req, res) => {
       }
     }
 
-    if (!expandBtn) {
+    if (!expandBtn && debug) {
       logs.push('⚠️ ...more butonu bulunamadı, devam ediliyor...');
     }
 
     // 4. Show transcript butonu ara
-    logs.push('🔍 Show transcript butonu aranıyor...');
+    if (debug) logs.push('🔍 Show transcript butonu aranıyor...');
     const transcriptSelectors = [
       'button[aria-label="Show transcript"]',
       'button[aria-label="Transkripti göster"]',
@@ -179,7 +181,7 @@ app.post('/transcript', async (req, res) => {
         await page.waitForSelector(selector, { timeout: 5000 });
         transcriptBtn = await page.$(selector);
         if (transcriptBtn) {
-          logs.push(`✅ Transcript butonu bulundu (${selector})`);
+          if (debug) logs.push(`✅ Transcript butonu bulundu (${selector})`);
           break;
         }
       } catch (e) {
@@ -188,20 +190,22 @@ app.post('/transcript', async (req, res) => {
     }
 
     if (!transcriptBtn) {
-      logs.push('❌ Transcript butonu bulunamadı');
-      await page.screenshot({ path: `${SCREENSHOT_DIR}/3_no_transcript_btn.png` });
+      if (debug) {
+        logs.push('❌ Transcript butonu bulunamadı');
+        await page.screenshot({ path: `${SCREENSHOT_DIR}/3_no_transcript_btn.png` });
+      }
       throw new Error('Transcript butonu bulunamadı - video transcript desteği olmayabilir');
     }
 
-    logs.push('🎯 Transcript butonuna tıklanıyor...');
+    if (debug) logs.push('🎯 Transcript butonuna tıklanıyor...');
     await page.evaluate(el => el.scrollIntoView(), transcriptBtn);
     await delay(500);
     await page.evaluate(el => el.click(), transcriptBtn);
     await delay(3000);
-    await page.screenshot({ path: `${SCREENSHOT_DIR}/4_after_transcript_click.png` });
+    if (debug) await page.screenshot({ path: `${SCREENSHOT_DIR}/4_after_transcript_click.png` });
 
     // 5. Transcript segmentlerini bekle
-    logs.push('🕒 Transcript segmentleri bekleniyor...');
+    if (debug) logs.push('🕒 Transcript segmentleri bekleniyor...');
     const segmentSelectors = [
       'ytd-transcript-segment-renderer',
       '.ytd-transcript-segment-renderer',
@@ -214,24 +218,26 @@ app.post('/transcript', async (req, res) => {
         await page.waitForSelector(selector, { timeout: 10000 });
         segments = await page.$$(selector);
         if (segments.length > 0) {
-          logs.push(`✅ ${segments.length} transcript segmenti bulundu`);
+          if (debug) logs.push(`✅ ${segments.length} transcript segmenti bulundu`);
           break;
         }
       } catch (e) {
-        logs.push(`⚠️ ${selector} ile segment bulunamadı`);
+        if (debug) logs.push(`⚠️ ${selector} ile segment bulunamadı`);
       }
     }
 
     if (segments.length === 0) {
-      logs.push('❌ Transcript segmentleri bulunamadı');
-      await page.screenshot({ path: `${SCREENSHOT_DIR}/5_no_segments.png` });
+      if (debug) {
+        logs.push('❌ Transcript segmentleri bulunamadı');
+        await page.screenshot({ path: `${SCREENSHOT_DIR}/5_no_segments.png` });
+      }
       throw new Error('Transcript segmentleri yüklenemedi');
     }
 
-    await page.screenshot({ path: `${SCREENSHOT_DIR}/5_transcript_segments.png` });
+    if (debug) await page.screenshot({ path: `${SCREENSHOT_DIR}/5_transcript_segments.png` });
 
     // 6. Transcript metinlerini çıkar
-    logs.push('📝 Transcript metinleri çıkarılıyor...');
+    if (debug) logs.push('📝 Transcript metinleri çıkarılıyor...');
     const transcript = await page.evaluate(() => {
       const selectors = [
         'ytd-transcript-segment-renderer',
@@ -259,25 +265,40 @@ app.post('/transcript', async (req, res) => {
     await browser.close();
 
     if (transcript.length === 0) {
-      logs.push('❌ Transcript metinleri boş');
-      return res.status(404).json({ error: 'Transcript metinleri çıkarılamadı.', logs });
+      if (debug) logs.push('❌ Transcript metinleri boş');
+      return res.status(404).json({ 
+        error: 'Transcript metinleri çıkarılamadı.', 
+        ...(debug && { logs })
+      });
     }
 
-    logs.push(`✅ ${transcript.length} transcript satırı başarıyla alındı`);
-    res.json({ 
+    if (debug) logs.push(`✅ ${transcript.length} transcript satırı başarıyla alındı`);
+    
+    const response = { 
       success: true, 
       transcript: transcript.join(' '), 
-      segments: transcript,
-      logs 
-    });
+      segments: transcript
+    };
+    
+    if (debug) {
+      response.logs = logs;
+    }
+    
+    res.json(response);
 
   } catch (err) {
-    logs.push(`🚨 HATA: ${err.message}`);
-    res.status(500).json({
+    if (debug) logs.push(`🚨 HATA: ${err.message}`);
+    
+    const errorResponse = {
       error: 'Transcript alınırken hata oluştu.',
-      details: err.message,
-      logs
-    });
+      details: err.message
+    };
+    
+    if (debug) {
+      errorResponse.logs = logs;
+    }
+    
+    res.status(500).json(errorResponse);
   }
 });
 
