@@ -1,0 +1,12 @@
+node_modules
+npm-debug.log
+screenshots/*.png
+cookies/
+cookies/*.txt
+cookies/**
+.git
+.gitignore
+README.md
+.env
+.DS_Store
+*.log
