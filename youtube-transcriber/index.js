@@ -311,7 +311,7 @@ app.get('/', (req, res) => {
   });
 });
 
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 6789;
 app.listen(PORT, () => {
   console.log(`✅ Transcript API çalışıyor: http://localhost:${PORT}`);
   console.log(`📁 Cookies klasörü: ${path.join(__dirname, 'cookies')}`);
